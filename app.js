@@ -1,147 +1,123 @@
 
-(function(){
-"use strict";
-var d=window.YOGI_DATA;
-var root=document.getElementById("content");
-var sidebar=document.getElementById("sidebar");
-var scrim=document.getElementById("scrim");
-var menu=document.getElementById("menuButton");
-var headerTitle=document.getElementById("headerTitle");
-var activeChart="households";
-function safe(v){return String(v==null?"":v).replace(/[&<>"']/g,function(x){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[x];});}
-function cite(ids){return (ids||[]).map(function(id){var s=d.sources.find(function(x){return x.id===id;});return s?'<a class="reference" href="'+safe(s.url)+'" target="_blank" rel="noopener noreferrer" title="'+safe(s.title)+'">'+id+' ↗</a>':"";}).join(" ");}
-function tag(t){return '<span class="eyebrow">'+safe(t)+'</span>';}
-function arrow(){return '<span aria-hidden="true">↗</span>';}
-function aTopic(x){return '#/dossier/'+x.id;}
-function linkClass(href){return (window.location.hash===href||(href==="#/"&&!window.location.hash))?' active':'';}
-function groups(){
- var result={};d.topics.forEach(function(t){(result[t.group]||(result[t.group]=[])).push(t);});
- return result;
-}
-function buildNav(){
- var nav='<a class="nav-link'+linkClass("#/")+'" href="#/"><span>◫</span> The overview</a>'+
- '<a class="nav-link'+linkClass("#/timeline")+'" href="#/timeline"><span>◷</span> Year by year</a>'+
- '<a class="nav-link'+linkClass("#/compare")+'" href="#/compare"><span>≡</span> Compare the numbers</a>'+
- '<a class="nav-link'+linkClass("#/topics")+'" href="#/topics"><span>▦</span> All investigations</a>'+
- '<a class="nav-link'+linkClass("#/districts")+'" href="#/districts"><span>⌖</span> 75 districts</a>';
- var gs=groups();Object.keys(gs).forEach(function(g){
-  nav+='<div class="nav-section">'+safe(g)+'</div>';
-  gs[g].forEach(function(t){nav+='<a class="nav-link nav-indent'+linkClass(aTopic(t))+'" href="'+aTopic(t)+'">'+safe(t.nav)+'</a>';});
- });
- nav+='<div class="nav-section">THE DESK</div>'+
- '<a class="nav-link'+linkClass("#/evidence")+'" href="#/evidence">Source library <span class="nav-number">'+d.sources.length+'</span></a>'+
- '<a class="nav-link'+linkClass("#/method")+'" href="#/method">Methods & limitations</a>'+
- '<a class="nav-link'+linkClass("#/open-questions")+'" href="#/open-questions">Open questions <span class="nav-number">'+d.backlog.length+'</span></a>';
- document.getElementById("navigation").innerHTML=nav;
-}
-function pageHead(kicker,title,deck){
- return '<div class="page-title">'+tag(kicker)+'<h1>'+title+'</h1><p class="lead">'+deck+'</p></div>';
-}
-function topicTile(t){return '<a class="topic-tile" href="'+aTopic(t)+'">'+tag(t.eyebrow)+'<h3>'+safe(t.title)+'</h3><p>'+safe(t.deck)+'</p><div class="tile-bottom"><span>'+safe(t.verdict)+'</span><b>Read story ↗</b></div></a>';}
-function metricTile(m){return '<div class="metric"><span class="metric-name">'+safe(m.label)+'</span><strong>'+safe(m.n)+'</strong><small>'+safe(m.sub)+'</small>'+cite([m.source])+'</div>';}
+(()=>{
+'use strict';
+const d=window.YOGI_DATA,el=document.getElementById('app'),nav=document.getElementById('primaryNav'),menu=document.getElementById('menuButton'),shade=document.getElementById('navShade');
+let selectedChart='households', chartDisplay='visual', issueFilter='all', gradeFilter='all', issueQuery='', districtQuery='', divisionFilter='all',sourceQuery='', sourceType='all', chronologyType='all',chronologyQuery='';
+const h=(s)=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const link=(url,label)=>'<a href="'+h(url)+'" target="_blank" rel="noopener noreferrer">'+h(label)+' <span aria-hidden="true">↗</span></a>';
+const getSrc=id=>d.sources.find(s=>s.id===id);
+const citations=(ids)=>[...new Set(ids||[])].map(id=>{let s=getSrc(id);return s?'<a class="cite" href="'+h(s.url)+'" target="_blank" rel="noopener noreferrer" title="'+h(s.title)+'">'+id+' ↗</a>':''}).join('');
+const badge=t=>'<span class="overline">'+h(t)+'</span>';
+const grade=(t,large=false)=>'<span class="grade '+(t.grade?'grade-'+t.grade.charAt(0).toLowerCase():'grade-na')+(large?' grade-large':'')+'" aria-label="Editorial grade '+h(t.grade||'Not rated')+'">'+(t.grade?h(t.grade):'N/R')+'</span>';
+const topicHref=t=>'#/issues/'+t.id;
+const heroRule='<div class="hairline"></div>';
+const issueDesc=t=>t.outcome;
+const time=s=>h(s).replaceAll('-','.');
+const filtersWrap=(items,field,className)=>items.map(([name,value])=>'<button type="button" class="'+className+(field===value?' is-selected':'')+'" data-filter="'+h(value)+'">'+h(name)+'</button>').join('');
+const navMenu=[['The overview','#/'],['The verdict','#/ratings'],['Investigations','#/issues'],['The numbers','#/numbers'],['Timeline','#/timeline'],['75 districts','#/districts'],['Source library','#/sources']];
+function renderNav(){const path=location.hash||'#/';nav.innerHTML=navMenu.map(([name,url],i)=>'<a href="'+url+'" class="navitem'+(path===url||(url==='#/issues'&&path.startsWith('#/issues/'))?' is-active':'')+'">'+name+'</a>').join('');}
+function closeNav(){document.body.classList.remove('nav-open');menu?.setAttribute('aria-expanded','false');}
+function top(title,kicker,lead,extra=''){return '<header class="page-intro">'+badge(kicker)+'<h1>'+h(title)+'</h1><p>'+h(lead)+'</p>'+extra+'</header>';}
+function issueCard(t,featured=false){return '<a class="issue-card'+(featured?' feature-card':'')+'" href="'+topicHref(t)+'"><span class="card-top"><span class="category-label">'+h(t.group)+'</span>'+grade(t)+'</span><span class="card-copy"><h3>'+h(t.title)+'</h3><p>'+h(t.outcome)+'</p></span><span class="card-bottom"><span class="rating-text">'+h(t.assessment)+'</span><span class="round-arrow">↗</span></span></a>';}
+function outcomeTicker(){const items=[
+ ['−14.75 pp','Multidimensional poverty','37.68% to 22.93% · NFHS-4 → NFHS-5','S06','down'],
+ ['+18.4 pp','Household electricity','72.6% to 91.0% · NFHS-4 → NFHS-5','S08','up'],
+ ['+1.3 pp','Severe child wasting','6.0% to 7.3% · NFHS-4 → NFHS-5','S08','bad'],
+ ['−28%','Capital outlay gap','Mean annual shortfall vs budget · FY21–FY25','S02','bad']
+];return '<div class="ticker-grid">'+items.map(([num,label,detail,src,tone],i)=>'<article class="ticker '+tone+'"><div class="ticker-index">FIGURE / 0'+(i+1)+'</div><div class="ticker-number">'+num+'</div><h3>'+label+'</h3><p>'+detail+'</p><div class="ticker-source">SOURCE '+citations([src])+'</div></article>').join('')+'</div>';}
+function quoteRow(){return '<section class="standfirst wrap"><div>'+badge('THE BIG PICTURE')+'<h2>What changed?<br><em>And what did it cost?</em></h2></div><div><p>'+h(d.editorial.featureDeck)+'</p><a class="underlink" href="#/ratings">Examine the ratings <span>↗</span></a></div></section>';}
 function home(){
- var feature=["economy","budgets","law","health","poverty","industry"].map(function(id){return d.topics.find(function(x){return x.id===id;});});
- return '<section class="hero">'+
- '<div class="hero-content">'+tag('AN INDEPENDENT PUBLIC RECORD  /  2017–2026')+
- '<h1>Uttar Pradesh.<br><em>The Yogi Years.</em></h1>'+
- '<p>What changed? Who gained? What remains unresolved? A chronological, evidence-led examination of government, everyday life and the economy since March 2017.</p>'+
- '<div class="hero-actions"><a class="cta primary" href="#/topics">Explore the investigations <span>↗</span></a><a class="cta ghost" href="#/method">How we assess claims</a></div>'+
- '<div class="hero-foot"><span>Independent analysis</span><span>Last research check: 18 Oct 2026</span><span>75 districts</span></div>'+
- '</div><div class="hero-photo" role="img" aria-label="Illustrative stock photograph of the Taj Mahal in Uttar Pradesh"><div class="photo-label">UTTAR PRADESH · STOCK PHOTOGRAPHY / UNSPLASH</div></div></section>'+
- '<section class="section intro"><div class="section-top">'+tag('THE FIRST READING')+'<h2>Progress is visible.<br><span>The full story is more complicated.</span></h2>'+
- '<p>The evidence documents gains in basic services, poverty reduction and infrastructure. It also shows a persistent income gap, weak child nutrition outcomes, budget execution shortfalls and unresolved legal and governance questions. These findings do not amount to a single political score.</p></div>'+
- '<div class="metrics-grid">'+d.metrics.map(metricTile).join("")+'</div></section>'+
- '<section class="section"><div class="section-heading">'+tag('THE CENTRAL QUESTION')+'<h2>Start with the comparisons</h2><p>Same indicator, defined years, original source. Do not confuse projections with outcomes.</p></div>'+charts(true)+'</section>'+
- '<section class="section"><div class="section-heading"><div>'+tag('THE INVESTIGATIONS')+'<h2>Follow the evidence</h2></div><a class="text-link" href="#/topics">Browse every subject ↗</a></div><div class="topic-grid">'+feature.map(topicTile).join("")+'</div></section>'+
- '<section class="feature-band"><div>'+tag('75 DISTRICTS · 18 DIVISIONS')+'<h2>A state average hides local realities.</h2><p>Bundelkhand, the western industrial belt, Purvanchal and the Terai cannot be evaluated using one headline number. District dossiers require verified local comparisons.</p><a class="cta primary" href="#/districts">Open the district directory ↗</a></div><div class="feature-stat"><span>57.74 — 74.19</span><small>District score range in UP’s own 2023–24 SDG publication. This is not the NITI national score.</small>'+cite(["S05"])+'</div></section>'+
- '<section class="section"><div class="section-heading"><div>'+tag('THE CHRONOLOGY')+'<h2>Dates change the story</h2></div><a class="text-link" href="#/timeline">Full timeline ↗</a></div>'+timelineItems(d.timeline.slice(-5))+'</section>'+
- '<section class="ethics-strip"><span class="round-icon">i</span><p><strong>Evidence before conclusions.</strong> Published proposals are not commissioned projects. Registered offences are not the full extent of crime. One survey is not proof of political causation. Every source and outstanding gap is disclosed.</p><a href="#/method">Read methodology ↗</a></section>';
+ const choice=['poverty','electricity','health','budgets','economy','law'].map(id=>d.topics.find(t=>t.id===id));
+ return '<section class="cover"><div class="cover-photo" role="img" aria-label="Illustrative photograph of the Taj Mahal, Uttar Pradesh"><span class="image-credit">UTTAR PRADESH · STOCK PHOTOGRAPH</span></div><div class="cover-copy"><div class="cover-meta"><span>AN INDEPENDENT EXAMINATION</span><span>2017—2026</span></div><h1><span>UTTAR PRADESH</span><strong>THE<br><i>YOGI</i><br>YEARS</strong></h1><p>'+h(d.editorial.heroDeck)+'</p><div class="cover-actions"><a class="primary-action" href="#/ratings">Explore the verdict <span>↗</span></a><a class="secondary-action" href="#/issues">Read investigations <span>↗</span></a></div><div class="cover-foot">Evidence before opinion. Outcomes before announcements.</div></div></section>'+
+ '<div class="marquee"><span>THE INDEPENDENT SCORECARD</span><span>19 FIELDS EXAMINED</span><span>75 DISTRICTS</span><span>NO OVERALL PARTY SCORE</span></div>'+
+ quoteRow()+
+ '<section class="wrap section-pad"><header class="section-head">'+badge('01 / THE HARD NUMBERS')+'<h2>Progress. Pressure. Reality.</h2><p>Four figures that resist easy political slogans. Each links to the underlying evidence.</p></header>'+outcomeTicker()+'</section>'+
+ '<section class="wrap section-pad"><header class="section-head split-head"><div>'+badge('02 / EDITORIAL ASSESSMENTS')+'<h2>Where the record stands</h2></div><a class="underlink" href="#/ratings">Full assessment table ↗</a></header><div class="issue-grid">'+choice.map(t=>issueCard(t)).join('')+'</div></section>'+
+ '<section class="dark-feature"><div class="dark-feature-inner wrap"><div class="dark-feature-text">'+badge('03 / THE DATA')+'<h2>Two numbers.<br><em>One question.</em></h2><p>Every visual compares defined measures and states precisely what the change does and does not show.</p><a class="light-action" href="#/numbers">Open the data explorer ↗</a></div><div class="dark-feature-chart">'+chartArea(true)+'</div></div></section>'+
+ '<section class="wrap section-pad"><header class="section-head split-head"><div>'+badge('04 / THE LONG VIEW')+'<h2>Nine years. Turning points.</h2></div><a class="underlink" href="#/timeline">Full chronology ↗</a></header><div class="compact-timeline">'+d.timeline.filter(x=>['2017-03','2022-03','2023-07','2024-11','2026-02'].includes(x.date)).map(t=>'<article><span>'+time(t.date)+'</span><h3>'+h(t.title)+'</h3><p>'+h(t.body)+'</p></article>').join('')+'</div></section>'+
+ '<section class="district-promo"><div class="wrap promo-inner"><div>'+badge('THE LOCAL PICTURE')+'<h2>One state.<br>Seventy-five realities.</h2><p>A district’s outcome is rarely captured by a statewide average. Explore Uttar Pradesh by administrative division.</p><a class="primary-action" href="#/districts">Browse districts <span>↗</span></a></div><div class="promo-number">75<span>DISTRICTS</span></div></div></section>';
 }
-function timelineItems(rows){return '<div class="timeline-list">'+rows.map(function(t){return '<article class="time-item"><div class="time-date">'+safe(t.date)+'</div><div class="time-content"><span class="mini-label">'+safe(t.type)+'</span><h3>'+safe(t.title)+'</h3><p>'+safe(t.body)+'</p><div>'+cite(t.refs)+'</div></div></article>';}).join("")+'</div>';}
-function timeline(){return pageHead("2017 → 2026","The chronology","A dated record of major political, social, economic and judicial turning points. Dates describe the event, not the date a claim became statistically measurable.")+
- '<div class="filterbar"><label for="eraFilter">Filter by event type</label><select id="eraFilter"><option value="all">All events</option>'+[...new Set(d.timeline.map(function(t){return t.type;}))].map(function(t){return '<option value="'+safe(t)+'">'+safe(t)+'</option>';}).join("")+'</select><span id="timelineCount"></span></div><div id="timelineMount"></div>';}
-function topicsPage(){return pageHead("OUR BEATS","The investigations","A growing collection of research dossiers spanning public finances, livelihoods, health, education, law, roads, politics and district inequality. Each opens with evidence, context and unresolved questions.")+
- '<div class="searchrow"><input id="topicSearch" type="search" placeholder="Search themes, questions or keywords…" aria-label="Search investigations"><span>'+d.topics.length+' ongoing dossiers</span></div><div class="topic-grid" id="topicResults">'+d.topics.map(topicTile).join("")+'</div>';}
-function dossier(t){
- return '<article class="reading">'+
- '<div class="article-hero"><a class="back-link" href="#/topics">← All investigations</a>'+tag(t.group+' / '+t.eyebrow)+
- '<h1>'+safe(t.title)+'</h1><p class="article-deck">'+safe(t.deck)+'</p>'+
- '<div class="article-meta"><span>RESEARCH NOTE · 18 OCT 2026</span><span>'+safe(t.verdict)+'</span><span>'+t.sources.length+' cited records</span></div></div>'+
- '<div class="article-layout"><div class="article-text"><p class="opening">'+safe(t.lead)+'</p>'+
- t.sections.map(function(s,i){return '<section class="article-section"><div class="paragraph-index">'+String(i+1).padStart(2,"0")+'</div><h2>'+safe(s[0])+'</h2><p>'+safe(s[1])+'</p></section>';}).join("")+
- '<div class="finding"><span>THE EVIDENCE SAYS</span><p>'+safe(t.takeaway)+'</p></div>'+
- '<div class="article-sources"><h2>Original records</h2><p>Source IDs are clickable and lead to the underlying publication.</p>'+t.sources.map(function(id){var s=d.sources.find(function(x){return x.id===id;});return s?'<a href="'+safe(s.url)+'" target="_blank" rel="noopener noreferrer"><b>'+id+'</b><span>'+safe(s.title)+'<small>'+safe(s.org)+' · '+safe(s.type)+'</small></span><span>↗</span></a>':"";}).join("")+'</div>'+
- '</div><aside class="article-aside"><div class="aside-sticky"><span class="mini-label">READING NOTE</span><h3>What makes this a finding?</h3><p>We distinguish independently measured outcomes, official announcements, unresolved allegations and editorial interpretation.</p><a class="text-link" href="#/method">See the assessment framework ↗</a><hr><h3>Related questions</h3>'+d.topics.filter(function(x){return x.id!==t.id && x.group===t.group;}).slice(0,3).map(function(x){return '<a class="related" href="'+aTopic(x)+'">'+safe(x.nav)+' ↗</a>';}).join("")+'</div></aside></div></article>';
+function ratingSummary(){const graded=d.topics.filter(x=>x.grade);const nr=d.topics.length-graded.length;return '<div class="rating-summary"><div><span>Fields examined</span><strong>'+d.topics.length+'</strong></div><div><span>Editorially graded</span><strong>'+graded.length+'</strong></div><div><span>Not rated</span><strong>'+nr+'</strong></div><div class="summary-foot">A grade is an editorial assessment of measurable results, <strong>not</strong> a political approval score.</div></div>';}
+function ratingRow(t){return '<a class="rating-row" href="'+topicHref(t)+'"><div class="row-grade">'+grade(t,true)+'</div><div class="row-content"><span class="category-label">'+h(t.group)+'</span><h3>'+h(t.nav)+'</h3><p>'+h(t.outcome)+'</p></div><div class="row-status">'+h(t.assessment)+'</div><div class="row-arrow">↗</div></a>';}
+function ratings(){return top('The outcome ratings','THE VERDICT','An evidence-led assessment of results, not a popularity contest. Where comparable outcome data do not support a fair grade, the verdict remains unscored.')+ratingSummary()+
+ '<div class="wrap listing-layout"><div class="list-header"><div>'+badge('FILTER THE ASSESSMENTS')+'<h2>Every field, independently judged.</h2></div><a class="underlink" href="#/method">How grades are assigned ↗</a></div><div class="filter-pills" id="gradeFilters">'+filtersWrap([['All fields','all'],['Graded','graded'],['A / B','positive'],['C / D','mixed'],['Not rated','nr']],gradeFilter,'pill')+'</div><div class="rating-rows" id="ratingRows"></div></div>';}
+function issues(){return top('The investigations','THE STORIES','Follow each public policy beyond the announcement: what changed, what the numbers support, and what remains contested.')+
+ '<div class="wrap listing-layout"><div class="list-header"><div>'+badge('19 POLICY AREAS')+'<h2>Choose a subject.</h2></div><div class="searchbox"><label class="sr-only" for="issueSearch">Find an investigation</label><input id="issueSearch" type="search" value="'+h(issueQuery)+'" placeholder="Search the stories…"><span>⌕</span></div></div><div class="filter-pills" id="issueFilters">'+filtersWrap([['All','all'],['Economy','Economy & livelihoods'],['People','People & services'],['Justice','Justice, rights & institutions'],['Infrastructure','Infrastructure & environment'],['Geography','Geography']],issueFilter,'pill')+'</div><div id="issueResults" class="issue-grid"></div></div>';}
+function verdictBlock(t){return '<div class="verdict-card"><div class="verdict-card-top"><span>OUTCOME ASSESSMENT</span><span>AS OF OCTOBER 2026</span></div><div class="verdict-main">'+grade(t,true)+'<div><strong>'+h(t.assessment)+'</strong><p>'+h(t.grade?'Editorial judgement based on the evidence shown below.':'Comparable evidence is insufficient for a responsible letter grade.')+'</p></div></div><div class="verdict-card-bottom"><a href="#/method">Understand this rating <span>↗</span></a></div></div>';}
+function story(t){
+ const related=d.topics.filter(x=>x.id!==t.id&&x.group===t.group).slice(0,3);
+ const chart=d.comparisons.find(c=> (t.id==='poverty'&&false)||(t.id==='health'&&c.id==='nutrition')||(t.id==='electricity'&&c.id==='households')||(t.id==='budgets'&&c.id==='capital')||(t.id==='water'&&c.id==='water'));
+ return '<div class="story-top wrap"><div class="story-breadcrumb"><a href="#/issues">Investigations</a> <span>/</span> '+h(t.nav)+'</div><div class="story-heading">'+badge(t.group.toUpperCase())+'<h1>'+h(t.title)+'</h1><p>'+h(t.deck)+'</p><div class="story-byline"><span>INDEPENDENT ANALYSIS</span><span>18 OCT 2026</span><button id="copyStory" class="inline-tool" type="button">Copy article link ↗</button></div></div></div>'+
+ '<section class="wrap story-grid"><article class="story-content"><div class="outcome-pull">'+badge('THE OUTCOME')+'<p>'+h(t.outcome)+'</p></div><section class="story-section"><span class="section-no">01</span><h2>What the evidence shows</h2><p>'+h(t.analysis)+'</p></section><section class="story-section"><span class="section-no">02</span><h2>The important qualification</h2><p>'+h(t.caveat)+'</p></section><section class="story-section"><span class="section-no">03</span><h2>Our assessment</h2><p>'+h(t.bottomLine)+'</p></section>'+
+ (chart?'<section class="story-chart"><div>'+badge('A CLOSER LOOK')+'<h2>'+h(chart.title)+'</h2></div>'+chartGraph(chart,true)+'</section>':'')+
+ '<section class="story-source-section"><div class="list-header"><div>'+badge('THE RECORD')+'<h2>Sources behind this story</h2></div></div>'+t.sources.map(id=>{const s=getSrc(id);return s?'<a class="article-source" href="'+h(s.url)+'" target="_blank" rel="noopener noreferrer"><b>'+h(id)+'</b><span>'+h(s.title)+'<small>'+h(s.org)+' · '+h(s.type)+'</small></span><i>↗</i></a>':''}).join('')+'</section></article>'+
+ '<aside class="story-side">'+verdictBlock(t)+'<div class="side-context"><h3>Reading this verdict</h3><p>An outcome grade is not proof of which government or scheme caused the change. Budget allocations and public claims receive separate scrutiny.</p></div>'+(related.length?'<div class="side-related"><span>ALSO READ</span>'+related.map(x=>'<a href="'+topicHref(x)+'">'+h(x.nav)+' <i>↗</i></a>').join('')+'</div>':'')+'</aside></section>';
 }
-function chartMarkup(c){
- var all=(c.items||[]).map(function(x){return x.score!==undefined?x.score:Math.max(x.before,x.after);});
- var max=Math.max.apply(null,all)||1;
- if(c.id==="capital")max=160000;
- else max=Math.max(100,max);
- var bar=function(value,name){return '<div class="bar-line"><span class="bar '+name+'" style="width:'+Math.max(.6,(value/max*100))+'%"></span><b>'+Number(value).toLocaleString("en-IN")+'</b></div>';};
- var list=c.items.map(function(i){
- return '<div class="chart-row"><div class="chart-name">'+safe(i.name)+'</div><div class="chart-bars">'+(i.score!==undefined?bar(i.score,"after"):bar(i.before,"before")+bar(i.after,"after"))+'</div></div>';
- }).join("");
- var legend=c.id==="sdg"?'<span><i class="legend-dot after"></i> NITI index score</span>':c.id==="capital"?'<span><i class="legend-dot before"></i> Budget estimate</span><span><i class="legend-dot after"></i> Actual</span>':c.id==="spending"?'<span><i class="legend-dot before"></i> State average FY2025–26</span><span><i class="legend-dot after"></i> UP FY2026–27</span>':c.id==="water"?'<span><i class="legend-dot before"></i> 15 Aug 2019</span><span><i class="legend-dot after"></i> Oct 2026 dashboard</span>':'<span><i class="legend-dot before"></i> 2015–16</span><span><i class="legend-dot after"></i> 2020–21</span>';
- return '<div class="chart-exhibit"><div class="chart-top"><div>'+tag(c.unit)+'<h3>'+safe(c.title)+'</h3></div><div class="chart-legend">'+legend+'</div></div><div class="chart-rows">'+list+'</div><p class="chart-caption">'+safe(c.note)+' '+cite([c.source])+'</p></div>';
+function chartGraph(c,compact=false){
+ const max=c.id==='capital'?160000:100;
+ const val=x=>(x||0).toLocaleString('en-IN');
+ const legend=(c.id==='sdg'?['NITI index score']:c.id==='capital'?['Budget estimate','Actual outlay']:c.id==='spending'?['All-state average, FY25–26','UP allocation, FY26–27']:c.id==='water'?['Aug 2019','Later dashboard panel']:['NFHS-4','NFHS-5']);
+ const bar=(n,kind)=>'<div class="graphic-bar"><span class="graphic-fill '+kind+'" style="width:'+Math.min(n/max*100,100)+'%"></span><b>'+val(n)+'</b></div>';
+ return '<div class="graph '+(compact?'graph-compact':'')+'"><div class="graph-legend">'+legend.map((n,i)=>'<span><i class="'+(i===0?'pre':'post')+'"></i>'+h(n)+'</span>').join('')+'</div>'+c.items.map(x=>'<div class="graph-item"><div class="graph-label">'+h(x.name)+'</div><div class="graph-bars">'+(x.score!==undefined?bar(x.score,'post'):bar(x.before,'pre')+bar(x.after,'post'))+'</div></div>').join('')+'<div class="graph-caption">'+h(c.note)+' '+citations([c.source])+'</div></div>';
 }
-function charts(compact){return '<div class="chart-switch" role="group" aria-label="Choose comparison">'+d.comparisons.map(function(c){return '<button type="button" data-chart="'+safe(c.id)+'" class="chart-tab'+(activeChart===c.id?' selected':'')+'">'+safe(c.title.split(":")[0])+'</button>';}).join("")+'</div><div id="chartMount">'+chartMarkup(d.comparisons.find(function(x){return x.id===activeChart;})||d.comparisons[0])+'</div>'+(compact?'<a class="text-link chart-exit" href="#/compare">All charts and definitions ↗</a>':'');}
-function compare(){return pageHead("BEFORE & AFTER","Compare the evidence","Side-by-side statistical views with reference periods, definitions, units and primary sources. Use the tabs to change datasets.")+charts(false)+
- '<section class="section inset-section"><div class="section-heading">'+tag('INTERPRETING THE NUMBERS')+'<h2>Three traps to avoid</h2></div><div class="three-col"><div><h3>Nominal ≠ real</h3><p>Price inflation can increase current-price GSDP without equivalent growth in actual production.</p></div><div><h3>Spending ≠ service</h3><p>Budgets allocate funds. Audited expenditure, physical completion and citizen outcomes are different measures.</p></div><div><h3>Correlation ≠ cause</h3><p>Pre/post government comparisons reveal patterns. They do not isolate the contribution of Union schemes, economic trends or previous investments.</p></div></div></section>';
+function chartTable(c){return '<div class="table-wrap"><table class="data-table"><thead><tr><th>Measure</th>'+(c.id==='sdg'?'<th>Index score</th>':'<th>Earlier</th><th>Later</th><th>Difference</th>')+'</tr></thead><tbody>'+c.items.map(x=>'<tr><td>'+h(x.name)+'</td>'+(x.score!==undefined?'<td>'+x.score+'</td>':'<td>'+x.before.toLocaleString('en-IN')+'</td><td>'+x.after.toLocaleString('en-IN')+'</td><td>'+(x.after-x.before>0?'+':'')+parseFloat((x.after-x.before).toFixed(2)).toLocaleString('en-IN')+'</td>')+'</tr>').join('')+'</tbody></table></div><p class="table-note">'+h(c.note)+' '+citations([c.source])+'</p>';}
+function chartArea(compact=false){let c=d.comparisons.find(c=>c.id===selectedChart)||d.comparisons[0];return '<div class="chart-panel'+(compact?' panel-compact':'')+'"><div class="chart-controls">'+(compact?'<span>FEATURED COMPARISON</span>':'<span>SELECT A DATASET</span>')+'<select id="chartSelect" aria-label="Comparison data">'+d.comparisons.map(x=>'<option value="'+h(x.id)+'" '+(x.id===selectedChart?'selected':'')+'>'+h(x.title)+'</option>').join('')+'</select></div><div class="chart-heading">'+badge(c.unit)+'<h3>'+h(c.title)+'</h3></div>'+(!compact?'<div class="chart-actions"><button class="'+(chartDisplay==='visual'?'chosen':'')+'" data-chart-view="visual" type="button">Chart</button><button class="'+(chartDisplay==='table'?'chosen':'')+'" data-chart-view="table" type="button">Table</button><button id="csvExport" type="button">Export CSV ↧</button></div>':'')+'<div id="chartGraphic">'+(chartDisplay==='table'&&!compact?chartTable(c):chartGraph(c,compact))+'</div></div>';}
+function numbers(){return top('The numbers behind the headlines','DATA EXPLORER','Compare like with like. Each dataset includes original dates, units, a source link and a warning about interpretation.')+
+ '<section class="wrap data-section" id="numbersMount">'+chartArea(false)+'</section><div class="wrap explainer"><div>'+badge('HOW TO READ A CHART')+'<h2>Never confuse an allocation with an outcome.</h2></div><p>Nominal output is not inflation-adjusted output. Reported tap connections are not consistent water delivery. Registered crimes are not all crime. Figures from different fiscal years or index frameworks need clear qualifiers. The comparison is only as good as its definitions.</p></div>';}
+function chronologyRows(rows){return rows.map((t,i)=>'<article class="chronology-row"><div class="chronology-date">'+time(t.date)+'</div><div class="chronology-mark"><span></span></div><div class="chronology-copy"><span class="category-label">'+h(t.type)+'</span><h3>'+h(t.title)+'</h3><p>'+h(t.body)+'</p><div class="citation-line">'+citations(t.refs)+'</div></div></article>').join('')||'<div class="noresults">No entries match that selection.</div>';}
+function timeline(){return top('A decade in the making','THE CHRONOLOGY','The political and policy record has turning points. See the sequence, the dates, and the original sources.')+
+ '<div class="wrap listing-layout"><div class="list-header"><div>'+badge('A TIMELINE OF EVENTS')+'<h2>2017 to 2026</h2></div><div class="searchbox"><label class="sr-only" for="timelineSearch">Search the timeline</label><input id="timelineSearch" type="search" value="'+h(chronologyQuery)+'" placeholder="Search events…"><span>⌕</span></div></div><div id="timelinePills" class="filter-pills">'+filtersWrap([['All events','all'],...new Set(d.timeline.map(t=>t.type))].map(x=>Array.isArray(x)?x:[x,x]),chronologyType,'pill')+'</div><div id="timelineRows" class="chronology"></div></div>';}
+function divisionCard(r){return '<section class="division-card"><div class="division-heading"><span>'+h(r.name)+' division</span><strong>'+r.districts.length+'</strong></div><div class="division-names">'+r.districts.map(n=>'<span>'+h(n)+'</span>').join('')+'</div></section>';}
+function districts(){return top('The 75 districts','THE STATE, CLOSE UP','State averages conceal large local differences. Browse Uttar Pradesh’s 18 administrative divisions and the districts within them.')+
+ '<div class="wrap listing-layout"><div class="district-note"><strong>57.74 to 74.19</strong><div>Range of district composite scores in UP’s 2023–24 district-specific SDG Index. The 42 front-runners and 33 performers come from this same series. It is distinct from the national SDG state score. '+citations(['S05'])+'</div></div><div class="directory-tools"><div class="searchbox"><label class="sr-only" for="districtSearch">Find a district</label><input type="search" id="districtSearch" value="'+h(districtQuery)+'" placeholder="Find a district or division…"><span>⌕</span></div><select id="divisionSelect" aria-label="Filter division"><option value="all">All divisions</option>'+d.regions.map(r=>'<option value="'+h(r.name)+'" '+(divisionFilter===r.name?'selected':'')+'>'+h(r.name)+'</option>').join('')+'</select></div><div class="directory-count" id="districtCount"></div><div class="division-grid" id="districtResults"></div></div>';}
+function sourceRow(s){return '<a class="source-item" href="'+h(s.url)+'" target="_blank" rel="noopener noreferrer"><span class="source-ref">'+h(s.id)+'</span><span><strong>'+h(s.title)+'</strong><small>'+h(s.org)+' · '+h(s.type)+'</small></span><span class="source-open">↗</span></a>';}
+function sources(){return top('Follow the sources','DOCUMENTS & DATA','Original research reports, government records, surveys, court judgments and independent analyses. Attribution is part of the story.')+
+ '<div class="wrap listing-layout"><div class="directory-tools"><div class="searchbox"><label class="sr-only" for="sourceSearch">Search source archive</label><input id="sourceSearch" type="search" value="'+h(sourceQuery)+'" placeholder="Search document, author, institution…"><span>⌕</span></div><select id="sourceType" aria-label="Filter source type"><option value="all">All sources</option><option value="Primary">Primary / official</option><option value="Independent">Independent</option><option value="Government">Government claims</option></select></div><div class="directory-count" id="sourceCount"></div><div class="source-list" id="sourceResults"></div></div>';}
+function methodology(){return top('How we judge results','EDITORIAL METHOD','The ratings assess documented changes in public outcomes. They do not measure political popularity or estimate the unique causal effect of one government.')+
+ '<div class="wrap method-layout"><section class="method-intro"><h2>A letter grade is a judgement. Evidence gives it boundaries.</h2><p>We identify the start and end period, the unit measured, the original source, the direction of change and any remaining deprivation. We treat surveys, audited fiscal accounts and judicial findings differently from government statements, investment intentions and spending promises.</p><p>The same measure must be comparable across years. If the series is missing, ambiguous or inadequate, we publish <strong>Not rated</strong> instead of inventing certainty.</p></section><div class="method-bands">'+d.ratingMethod.bands.map(r=>'<div class="band-row"><div class="grade '+(r.grade==='Not rated'?'grade-na':'grade-'+r.grade.toLowerCase())+'">'+(r.grade==='Not rated'?'N/R':r.grade)+'</div><p>'+h(r.text)+'</p></div>').join('')+'</div><section class="method-rules">'+badge('THE FIVE TESTS')+'<h2>The questions behind every judgement</h2><div class="rule-grid">'+[
+ ['01','Baseline','What was the comparable starting point, including before March 2017?'],
+ ['02','Outcome','Did a measurable public outcome change, rather than only the budget or publicity?'],
+ ['03','Remaining gap','How far are residents from a good outcome or a relevant comparator?'],
+ ['04','Attribution','What part of the change may reflect Union schemes, inherited projects or broader trends?'],
+ ['05','Reliability','Is the underlying record a survey, audit, official claim or judicial finding?']
+ ].map(x=>'<div><span>'+x[0]+'</span><h3>'+x[1]+'</h3><p>'+x[2]+'</p></div>').join('')+'</div></section><section class="method-close"><h2>What a grade does not say</h2><p>A grade is not a state-wide report card, a ranking of individual leaders, proof of causation or a forecast. The assessment is specific to the outcome and source dates cited. An unresolved investigation remains explicitly unrated. Facts and grades are corrected when stronger records warrant revision.</p><a class="primary-action" href="#/ratings">View the outcomes <span>↗</span></a></section></div>';}
+function render(){
+ const route=decodeURIComponent((location.hash||'#/').replace(/^#\/?/,'')).split('/');
+ let page='Overview',html='';
+ switch(route[0]){
+ case '':html=home();break;
+ case 'ratings':page='The verdict';html=ratings();break;
+ case 'issues':if(route[1]){let t=d.topics.find(t=>t.id===route[1]);page=t?.nav||'Not found';html=t?story(t):top('Page not found','404','This investigation does not exist.');}else{page='Investigations';html=issues();}break;
+ case 'numbers':page='The numbers';html=numbers();break;
+ case 'timeline':page='Timeline';html=timeline();break;
+ case 'districts':page='75 districts';html=districts();break;
+ case 'sources':page='Source library';html=sources();break;
+ case 'method':page='Editorial method';html=methodology();break;
+ default:page='Not found';html=top('Page not found','404','Choose another section from the navigation.');}
+ el.innerHTML=html;renderNav();closeNav();document.title=(page==='Overview'?'UP - The Yogi Years':page+' | UP - The Yogi Years');window.scrollTo({top:0,behavior:'instant'});wire(route);
 }
-function districtPage(){
- return pageHead("75 DISTRICTS / 18 DIVISIONS","The district directory","Geography is the next frontier of this investigation. This is a complete district index, not a completed district-level evidence audit.")+
- '<div class="district-intro"><strong>42 front-runners · 33 performers</strong><p>UP’s own 2023–24 district SDG publication reports scores from 57.74 to 74.19. We are not assigning unverified individual scores to districts. '+cite(["S05"])+'</p></div>'+
- '<div class="searchrow"><input id="districtSearch" type="search" placeholder="Find a district or division…" aria-label="Find a district"><span id="districtCount">75 districts</span></div><div id="districtResults" class="district-grid">'+regionList(d.regions)+'</div>'+
- '<section class="ethics-strip"><span class="round-icon">?</span><p><strong>What is missing?</strong> District-specific trends for school learning, maternal health, welfare utilisation, road access, FIRs, local wages, water and air quality. These require validated extracts from official publications.</p><a href="#/open-questions">Gap register ↗</a></section>';
+function refreshRatings(){const o=d.topics.filter(t=>gradeFilter==='all'||(gradeFilter==='graded'&&t.grade)||(gradeFilter==='positive'&&t.grade&&['A','B'].includes(t.grade[0]))||(gradeFilter==='mixed'&&t.grade&&['C','D'].includes(t.grade[0]))||(gradeFilter==='nr'&&!t.grade));document.getElementById('ratingRows').innerHTML=o.map(ratingRow).join('')||'<div class="noresults">Nothing in this grade group.</div>';}
+function refreshIssues(){const q=issueQuery.toLowerCase();const o=d.topics.filter(t=>(issueFilter==='all'||t.group===issueFilter)&&[t.nav,t.group,t.title,t.outcome,t.assessment].join(' ').toLowerCase().includes(q));document.getElementById('issueResults').innerHTML=o.map(t=>issueCard(t)).join('')||'<div class="noresults">No investigations match that search.</div>';}
+function refreshTimeline(){const q=chronologyQuery.toLowerCase();const o=d.timeline.filter(t=>(chronologyType==='all'||t.type===chronologyType)&&[t.title,t.body,t.date,t.type].join(' ').toLowerCase().includes(q));document.getElementById('timelineRows').innerHTML=chronologyRows(o);}
+function refreshDistricts(){const q=districtQuery.toLowerCase();const regs=d.regions.filter(r=>divisionFilter==='all'||r.name===divisionFilter).map(r=>({name:r.name,districts:r.districts.filter(n=>!q||r.name.toLowerCase().includes(q)||n.toLowerCase().includes(q))})).filter(r=>r.districts.length);document.getElementById('districtResults').innerHTML=regs.map(divisionCard).join('')||'<div class="noresults">No districts match that search.</div>';document.getElementById('districtCount').textContent=regs.reduce((n,r)=>n+r.districts.length,0)+' districts · '+regs.length+' divisions';}
+function refreshSources(){const q=sourceQuery.toLowerCase();const o=d.sources.filter(s=>(sourceType==='all'||s.type.toLowerCase().includes(sourceType.toLowerCase()))&&[s.title,s.org,s.type,s.id].join(' ').toLowerCase().includes(q));document.getElementById('sourceResults').innerHTML=o.map(sourceRow).join('')||'<div class="noresults">No sources match that search.</div>';document.getElementById('sourceCount').textContent=o.length+' sources';}
+function refreshCharts(compact){let mount=document.getElementById(compact?'chartGraphic':'numbersMount');if(!mount)return;if(compact){const c=d.comparisons.find(x=>x.id===selectedChart)||d.comparisons[0];mount.innerHTML=chartGraph(c,true);const title=mount.closest('.chart-panel').querySelector('.chart-heading');title.innerHTML=badge(c.unit)+'<h3>'+h(c.title)+'</h3>';}else{mount.innerHTML=chartArea(false);wireCharts(false);}}
+function exportCSV(){let c=d.comparisons.find(c=>c.id===selectedChart);let arr=c.items.map(x=>x.score!==undefined?[x.name,x.score]:[x.name,x.before,x.after,x.after-x.before]);arr.unshift(c.id==='sdg'?['Measure','Index score']:['Measure','Earlier','Later','Difference']);let csv=arr.map(x=>x.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(',')).join('\r\n');let a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='up-the-yogi-years-'+c.id+'.csv';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
+function wireCharts(compact){let select=document.getElementById('chartSelect');if(select)select.addEventListener('change',e=>{selectedChart=e.target.value;refreshCharts(compact);if(compact)select.value=selectedChart;});if(!compact){document.querySelectorAll('[data-chart-view]').forEach(b=>b.addEventListener('click',()=>{chartDisplay=b.dataset.chartView;refreshCharts(false);}));document.getElementById('csvExport')?.addEventListener('click',exportCSV);}}
+function wire(route){
+ if(route[0]==='ratings'){refreshRatings();document.getElementById('gradeFilters').addEventListener('click',e=>{let b=e.target.closest('[data-filter]');if(!b)return;gradeFilter=b.dataset.filter;document.querySelectorAll('#gradeFilters button').forEach(x=>x.classList.toggle('is-selected',x===b));refreshRatings();});}
+ if(route[0]==='issues'&&!route[1]){refreshIssues();document.getElementById('issueSearch').addEventListener('input',e=>{issueQuery=e.target.value;refreshIssues();});document.getElementById('issueFilters').addEventListener('click',e=>{let b=e.target.closest('[data-filter]');if(!b)return;issueFilter=b.dataset.filter;document.querySelectorAll('#issueFilters button').forEach(x=>x.classList.toggle('is-selected',x===b));refreshIssues();});}
+ if(route[0]==='issues'&&route[1]){document.getElementById('copyStory')?.addEventListener('click',e=>{let button=e.currentTarget;if(navigator.clipboard?.writeText){navigator.clipboard.writeText(location.href).then(()=>{button.textContent='Copied ✓';}).catch(()=>{button.textContent='Copy from address bar';});}else{button.textContent='Copy from address bar';}});}
+ if(route[0]==='timeline'){refreshTimeline();document.getElementById('timelineSearch').addEventListener('input',e=>{chronologyQuery=e.target.value;refreshTimeline();});document.getElementById('timelinePills').addEventListener('click',e=>{let b=e.target.closest('[data-filter]');if(!b)return;chronologyType=b.dataset.filter;document.querySelectorAll('#timelinePills button').forEach(x=>x.classList.toggle('is-selected',x===b));refreshTimeline();});}
+ if(route[0]==='districts'){refreshDistricts();document.getElementById('districtSearch').addEventListener('input',e=>{districtQuery=e.target.value;refreshDistricts();});document.getElementById('divisionSelect').addEventListener('change',e=>{divisionFilter=e.target.value;refreshDistricts();});}
+ if(route[0]==='sources'){refreshSources();document.getElementById('sourceSearch').addEventListener('input',e=>{sourceQuery=e.target.value;refreshSources();});document.getElementById('sourceType').addEventListener('change',e=>{sourceType=e.target.value;refreshSources();});}
+ if(route[0]==='numbers')wireCharts(false);
+ if(route[0]==='')wireCharts(true);
 }
-function regionList(regions){return regions.map(function(r){return '<div class="district-box"><span class="mini-label">'+safe(r.name)+' division</span><h3>'+r.districts.length+' districts</h3><ul>'+r.districts.map(function(x){return '<li>'+safe(x)+'</li>';}).join("")+'</ul></div>';}).join("");}
-function evidence(){
- return pageHead("PROVENANCE","The source library","A curated, growing library of directly linked publications, reports and records. Primary data are preferred; government claims and independent interpretation are labelled separately.")+
- '<div class="searchrow"><input id="sourceSearch" type="search" placeholder="Search source ID, institution or title…" aria-label="Find a source"><span id="sourceCount">'+d.sources.length+' records</span></div>'+
- '<div id="sourceResults">'+sourceRows(d.sources)+'</div>';
-}
-function sourceRows(src){return '<div class="source-list">'+src.map(function(s){return '<a class="source-row" href="'+safe(s.url)+'" target="_blank" rel="noopener noreferrer"><span class="source-id">'+s.id+'</span><span class="source-body"><strong>'+safe(s.title)+'</strong><small>'+safe(s.org)+' · '+safe(s.type)+'</small></span><span class="source-arrow">↗</span></a>';}).join("")+'</div>';}
-function openQuestions(){
- return pageHead("WHAT IS NOT YET VERIFIED","The open investigation ledger","A transparent backlog of specific data-collection tasks. This prevents incomplete reporting from being presented as a finished evaluation.")+
- '<div class="gap-list">'+d.backlog.map(function(b,i){return '<article class="gap"><span class="priority '+b.priority.toLowerCase()+'">'+b.priority+'</span><div><h3>'+safe(b.theme)+'</h3><p>'+safe(b.task)+'</p></div><small>#'+String(i+1).padStart(2,"0")+'</small></article>';}).join("")+'</div>';
-}
-function method(){
- return pageHead("EDITORIAL STANDARDS","How this investigation works","The goal is to make every finding testable, including findings favourable to the government and findings critical of it.")+
- '<div class="method-grid">'+[
- ["01","Start before March 2017","Define a baseline wherever a comparable pre-government series exists. Prefer several earlier years over a single cherry-picked observation."],
- ["02","Track the full period","Use dated source records from 2017 through October 2026, with survey fieldwork dates, financial years and release dates kept distinct."],
- ["03","Compare like with like","Check population denominators, inflation, index methodology, sampling, case definitions and whether the comparator is UP or an all-state average."],
- ["04","Separate four claim classes","Distinguish official statements, reported administrative data, survey/audited outcomes and judicially established findings. Allegations remain allegations."],
- ["05","Avoid false attribution","State and Union programmes overlap. Economic cycles, the pandemic, demographic trends and inherited projects affect outcomes. Pre/post change is not causal proof."],
- ["06","Publish uncertainty","Label budget estimates (BE), revised estimates (RE), actuals, projections, survey confidence and missing local records."],
- ["07","Use fair contradiction","Record plausible government explanations and serious criticism with evidence. Correct facts rather than balancing claims mechanically."],
- ["08","Keep a revision trail","Every later edition should preserve a dated evidence ledger, corrections log, original links and claims withdrawn or updated."]
- ].map(function(item){return '<article class="method-card"><span>'+item[0]+'</span><h3>'+item[1]+'</h3><p>'+item[2]+'</p></article>';}).join("")+'</div>'+
- '<section class="method-callout"><h2>What this edition is</h2><p>A research-backed foundation with '+d.topics.length+' editorial dossiers, '+d.sources.length+' linked sources, interactive comparisons, an event chronology, a 75-district index and a transparent backlog. It is <strong>not</strong> an assertion that every scheme, district, police case, rupee of public spending or allegation since 2017 has already been verified.</p><h2>Images and licensing</h2><p>Editorial stock imagery is illustrative. It is not treated as evidence of a government outcome. Taj Mahal photography is embedded from Unsplash and linked to the platform’s licensing terms. No invented archival photos or fabricated charts appear.</p><h2>Corrections</h2><p>Propose corrections with the exact claim, a reliable source, publication date and the necessary replacement. Use the public repository issue tracker. Content is dated 18 October 2026 and requires future source rechecks.</p><a class="cta primary" href="https://github.com/Ashish-Bhatia/UP_The_Yogi_Years/issues" target="_blank" rel="noopener noreferrer">Submit evidence or correction ↗</a></section>';
-}
-function closeMenu(){document.body.classList.remove("menu-open");menu.setAttribute("aria-expanded","false");}
-function route(){
- var route=decodeURIComponent(location.hash.replace(/^#\/?/,"")||"");
- var spl=route.split("/");
- var content;
- if(!route){content=home();headerTitle.textContent="The overview";}
- else if(spl[0]==="dossier"){var t=d.topics.find(function(x){return x.id===spl[1];});content=t?dossier(t):pageHead("404","Not found","That dossier does not exist.");headerTitle.textContent=t?t.nav:"Not found";}
- else {var routes={"timeline":timeline,"topics":topicsPage,"compare":compare,"districts":districtPage,"evidence":evidence,"method":method,"open-questions":openQuestions};content=routes[route]?routes[route]():pageHead("404","Page not found","Choose a section from the navigation.");headerTitle.textContent=({"timeline":"Year by year","topics":"Investigations","compare":"Compare the numbers","districts":"75 districts","evidence":"The source library","method":"Methods & limitations","open-questions":"Open questions"})[route]||"Not found";}
- root.innerHTML=content;
- buildNav();closeMenu();window.scrollTo(0,0);wirePage(route);
- document.title=(headerTitle.textContent==="The overview"?"UP - The Yogi Years":headerTitle.textContent+" | UP - The Yogi Years");
-}
-function wirePage(route){
- root.querySelectorAll("[data-chart]").forEach(function(b){b.addEventListener("click",function(){activeChart=b.getAttribute("data-chart");root.querySelectorAll("[data-chart]").forEach(function(t){t.classList.toggle("selected",t===b);});var c=d.comparisons.find(function(x){return x.id===activeChart;});document.getElementById("chartMount").innerHTML=chartMarkup(c);});});
- var f=document.getElementById("eraFilter");if(f){var rerender=function(){var v=f.value;var rows=d.timeline.filter(function(t){return v==="all"||t.type===v;});document.getElementById("timelineMount").innerHTML=timelineItems(rows);document.getElementById("timelineCount").textContent=rows.length+" entries";};f.addEventListener("change",rerender);rerender();}
- var ds=document.getElementById("districtSearch");if(ds){ds.addEventListener("input",function(){var q=ds.value.trim().toLowerCase();var rs=d.regions.map(function(r){return {name:r.name,districts:r.districts.filter(function(x){return !q||r.name.toLowerCase().includes(q)||x.toLowerCase().includes(q);})};}).filter(function(r){return r.districts.length;});document.getElementById("districtResults").innerHTML=regionList(rs)||'<p class="empty">No matching districts</p>';document.getElementById("districtCount").textContent=rs.reduce(function(n,r){return n+r.districts.length;},0)+" districts";});}
- var ts=document.getElementById("topicSearch");if(ts){ts.addEventListener("input",function(){var q=ts.value.toLowerCase();var out=d.topics.filter(function(t){return [t.title,t.deck,t.group,t.nav,t.lead].join(" ").toLowerCase().includes(q);});document.getElementById("topicResults").innerHTML=out.map(topicTile).join("")||'<p class="empty">No matching investigations</p>';});}
- var ss=document.getElementById("sourceSearch");if(ss){ss.addEventListener("input",function(){var q=ss.value.toLowerCase();var out=d.sources.filter(function(s){return [s.id,s.title,s.org,s.type].join(" ").toLowerCase().includes(q);});document.getElementById("sourceResults").innerHTML=sourceRows(out);document.getElementById("sourceCount").textContent=out.length+" records";});}
-}
-menu.addEventListener("click",function(){var opened=document.body.classList.toggle("menu-open");menu.setAttribute("aria-expanded",opened?"true":"false");});
-scrim.addEventListener("click",closeMenu);
-window.addEventListener("hashchange",route);
-document.addEventListener("keydown",function(e){if(e.key==="Escape")closeMenu();});
-route();
+menu.addEventListener('click',()=>{let opened=document.body.classList.toggle('nav-open');menu.setAttribute('aria-expanded',String(opened));});
+shade.addEventListener('click',closeNav);
+window.addEventListener('hashchange',render);
+window.addEventListener('keydown',e=>{if(e.key==='Escape')closeNav();});
+window.addEventListener('scroll',()=>{const bar=document.getElementById('readingProgress');if(!bar)return;let v=(window.scrollY/(document.documentElement.scrollHeight-window.innerHeight))*100;bar.style.width=Math.min(100,Math.max(0,v||0))+'%';},{passive:true});
+render();
 })();
