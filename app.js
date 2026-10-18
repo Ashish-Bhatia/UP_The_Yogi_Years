@@ -2,7 +2,7 @@
 (()=>{
 'use strict';
 const d=window.YOGI_DATA,el=document.getElementById('app'),nav=document.getElementById('primaryNav'),menu=document.getElementById('menuButton'),shade=document.getElementById('navShade');
-let selectedChart='households', chartDisplay='visual', issueFilter='all', gradeFilter='all', issueQuery='', districtQuery='', divisionFilter='all',sourceQuery='', sourceType='all', chronologyType='all',chronologyQuery='';
+let selectedChart='youth-jobs', chartDisplay='visual', issueFilter='all', gradeFilter='all', issueQuery='', districtQuery='', divisionFilter='all',sourceQuery='', sourceType='all', chronologyType='all',chronologyQuery='';
 const h=(s)=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const link=(url,label)=>'<a href="'+h(url)+'" target="_blank" rel="noopener noreferrer">'+h(label)+' <span aria-hidden="true">↗</span></a>';
 const getSrc=id=>d.sources.find(s=>s.id===id);
