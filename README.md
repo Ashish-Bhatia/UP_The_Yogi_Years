@@ -5,8 +5,8 @@ An independent, source-linked research publication about Uttar Pradesh under Chi
 https://ashish-bhatia.github.io/UP_The_Yogi_Years/
 
 ## Research scope
-- 13 research dossiers covering economy, fiscal policy, livelihoods, poverty, welfare, nutrition, healthcare, education, crime, justice, rights, roads, environment, elections and district inequality.
-- 24 clickable primary, audited, independent or government-attributed source records.
+- 19 research dossiers covering economy, fiscal policy, livelihoods, poverty, welfare, nutrition, healthcare, education, crime, justice, rights, roads, environment, elections and district inequality.
+- 31 clickable primary, audited, independent or government-attributed source records.
 - Interactive before/after comparisons with explicit years, denominators and caveats.
 - Chronological event ledger, 18 divisions / 75 districts and a prioritized evidence backlog.
 - Independent editorial methodology. Findings are not partisan endorsements or accusations.
