@@ -13,7 +13,7 @@ function cite(ids){return (ids||[]).map(function(id){var s=d.sources.find(functi
 function tag(t){return '<span class="eyebrow">'+safe(t)+'</span>';}
 function arrow(){return '<span aria-hidden="true">↗</span>';}
 function aTopic(x){return '#/dossier/'+x.id;}
-function linkClass(href){return window.location.hash===href?' active':'';}
+function linkClass(href){return (window.location.hash===href||(href==="#/"&&!window.location.hash))?' active':'';}
 function groups(){
  var result={};d.topics.forEach(function(t){(result[t.group]||(result[t.group]=[])).push(t);});
  return result;
